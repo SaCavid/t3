@@ -73,6 +73,7 @@ func (c *Client) writePump() {
 
 func (srv *Srv) ServeWs(c *gin.Context) {
 
+	log.Println("Trying to connect")
 	pool := pool{
 		w:  c.Writer,
 		r:  c.Request,
@@ -87,7 +88,7 @@ func (srv *Srv) ServeWs(c *gin.Context) {
 
 	srv.Hub.pool <- pool
 	conn := &websocket.Conn{}
-
+	log.Println("Asking for register")
 	for {
 		select {
 		case conn = <-pool.Ch:
@@ -100,7 +101,7 @@ func (srv *Srv) ServeWs(c *gin.Context) {
 			break
 		}
 	}
-
+	log.Println("Registered", conn.RemoteAddr().String())
 	client := &Client{
 
 		// need better ID

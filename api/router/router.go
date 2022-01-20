@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"sync"
 	repo "t3/api/sql"
 	"t3/models"
@@ -45,9 +46,9 @@ func Route(srv *Srv) {
 
 	r.POST("/flights", srv.Flights)
 	r.POST("/insert", srv.InsertData)
-	r.POST("/ws", srv.ServeWs)
+	r.GET("/ws", srv.ServeWs)
 
-	log.Fatal(r.Run())
+	log.Fatal(r.Run(fmt.Sprintf(":%s", os.Getenv("PORT"))))
 }
 
 func (srv *Srv) Flights(c *gin.Context) {
@@ -60,8 +61,6 @@ func (srv *Srv) Flights(c *gin.Context) {
 		})
 		return
 	}
-
-	log.Println(filter)
 
 	srv.Mu.RLock()
 	flights := make([]models.Flight, 0)
@@ -94,8 +93,7 @@ func (srv *Srv) Flights(c *gin.Context) {
 	// lists sorted as ASC
 	if filter.OrderBy {
 		l := 0
-		r := len(flights)
-		orderedFlights := make([]models.Flight, len(flights))
+		r := len(flights) - 1
 		for l <= r {
 			first := flights[l]
 			last := flights[r]
@@ -104,8 +102,6 @@ func (srv *Srv) Flights(c *gin.Context) {
 			l++
 			r--
 		}
-
-		flights = orderedFlights
 	}
 
 	c.JSON(http.StatusOK, flights)

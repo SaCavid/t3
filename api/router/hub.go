@@ -106,10 +106,10 @@ func (h *Hub) Broadcast() {
 
 func (h *Hub) Pool() {
 	wg := &sync.WaitGroup{}
-
+	log.Println("Starting register pool", workers)
 	wg.Add(workers)
 	// create 256 workers for websocket registration
-	for i := workers; i <= 0; i++ {
+	for i := 0; i <= workers; i++ {
 		go h.worker()
 	}
 
@@ -117,16 +117,18 @@ func (h *Hub) Pool() {
 }
 
 func (h *Hub) worker() {
+
+	log.Println("Starting workers")
 	for {
 		select {
 		case pool := <-h.pool:
-
+			log.Println("Starting websocket register")
 			conn, err := upgrader.Upgrade(pool.w, pool.r, nil)
 			if err != nil {
 				log.Println(err)
 				return
 			}
-
+			log.Println("Registered on websocket")
 			pool.Ch <- conn
 
 		}
