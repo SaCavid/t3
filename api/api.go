@@ -34,11 +34,12 @@ func Startup() {
 func Listen() {
 
 	srv := &router.Srv{
-		MFlights:     make(map[string]uint),
-		UnSorted:     make([]models.Flight, 0),
+		MFlights: make(map[int]models.Flight),
+		// UnSorted:     make([]models.Flight, 0),
 		InsertDataCh: make(chan []models.Flight, 10),
 	}
 
 	handler.InitializeDB(srv)
+	go handler.DBHub(srv)
 	router.Route(srv)
 }

@@ -9,11 +9,18 @@ import (
 	"t3/models"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gorilla/websocket"
 )
+
+var upGrader = websocket.Upgrader{
+	CheckOrigin: func(r *http.Request) bool {
+		return true
+	},
+}
 
 type Srv struct {
 	DB                    repo.Repo
-	MFlights              map[int]uint // key = flight num, value = index in notsorted
+	MFlights              map[int]models.Flight // key = flight num, value = index in notsorted
 	UnSorted              []models.Flight
 	SortedByFlightNum     []models.Flight
 	SortedByCity          []models.Flight
@@ -22,21 +29,28 @@ type Srv struct {
 	InsertDataCh chan []models.Flight
 
 	Mu sync.RWMutex
+
+	Hub *Hub
 }
 
 func Route(srv *Srv) {
-	router := gin.Default()
+	r := gin.Default()
 
-	router.POST("/flights", srv.Flights)
+	hub := NewHub()
+	go hub.Pool()
+	go hub.Run()
+	srv.Hub = hub
 
-	router.POST("/insert", srv.InsertData)
+	r.POST("/flights", srv.Flights)
+	r.POST("/insert", srv.InsertData)
+	r.POST("/ws", srv.ServeWs)
 
-	log.Fatal(router.Run())
+	log.Fatal(r.Run())
 }
 
 func (srv *Srv) Flights(c *gin.Context) {
 	filter := models.Filter{}
-	err := c.Bind(filter)
+	err := c.Bind(&filter)
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -48,9 +62,11 @@ func (srv *Srv) Flights(c *gin.Context) {
 	log.Println(filter)
 
 	srv.Mu.RLock()
-	flights := srv.UnSorted
+	flights := make([]models.Flight, 0)
 	// TODO Sort it here depended on filter
 	switch filter.SortBy {
+	case 0:
+		flights = srv.UnSorted
 	case 1:
 		// sort by flight number
 		flights = srv.SortedByFlightNum
@@ -74,7 +90,7 @@ func (srv *Srv) Flights(c *gin.Context) {
 	}
 
 	// lists sorted as ASC
-	if filter.OrderBy == "desc" {
+	if filter.OrderBy {
 		l := 0
 		r := len(flights)
 		orderedFlights := make([]models.Flight, len(flights))
@@ -97,6 +113,7 @@ func (srv *Srv) InsertData(c *gin.Context) {
 	flights := []models.Flight{}
 	err := c.Bind(&flights)
 	if err != nil {
+		log.Println(err)
 		c.JSON(http.StatusBadRequest, gin.H{
 			"message": err.Error(),
 		})

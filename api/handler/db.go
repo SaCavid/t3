@@ -3,10 +3,12 @@ package handler
 import (
 	"log"
 	"os"
+	"sort"
 	"sync"
 	"t3/api/router"
 	repo "t3/api/sql"
 	"t3/models"
+	merge "t3/utils"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -28,6 +30,8 @@ func InitializeDB(srv *router.Srv) {
 	srv.DB = repo.Repo{
 		Db: db,
 	}
+
+	initializeLists(srv)
 }
 
 func DBHub(srv *router.Srv) {
@@ -47,17 +51,29 @@ func processNewValues(validFlights []models.Flight, srv *router.Srv) {
 	srv.Mu.RLock()
 	for _, v := range validFlights {
 		if _, ok := srv.MFlights[v.FlightNum]; ok {
-			registeredFlights = append(registeredFlights, models.Flights{})
+			registeredFlights = append(registeredFlights, models.Flights{
+				Flight: v,
+			})
 		} else {
-			notRegisteredFlights = append(notRegisteredFlights, models.Flights{})
+			notRegisteredFlights = append(notRegisteredFlights, models.Flights{
+				Flight: v,
+			})
 		}
 	}
 	srv.Mu.RUnlock()
 
 	wg := sync.WaitGroup{}
-	wg.Add(2)
-	go insert(notRegisteredFlights, srv, wg)
-	go update(registeredFlights, srv, wg)
+
+	if len(notRegisteredFlights) > 0 {
+		wg.Add(1)
+		log.Println(notRegisteredFlights)
+		go insert(notRegisteredFlights, srv, wg)
+	}
+
+	if len(registeredFlights) > 0 {
+		wg.Add(1)
+		go update(registeredFlights, srv, wg)
+	}
 	wg.Wait()
 
 	go sortLists(srv)
@@ -81,6 +97,29 @@ func update(registeredFlights []models.Flights, srv *router.Srv, wg sync.WaitGro
 	}
 }
 
+func initializeLists(srv *router.Srv) {
+
+	flights, err := srv.DB.GellAllFlights()
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	srv.Mu.Lock()
+	srv.UnSorted = flights
+
+	// clean map
+	srv.MFlights = make(map[int]models.Flight)
+	for _, v := range flights {
+		srv.MFlights[v.FlightNum] = v // dump uint
+	}
+	srv.Mu.Unlock()
+
+	go sortByFlightNum(flights, srv)
+	go sortbyDepartureCity(flights, srv)
+	go sortByDepartureTime(flights, srv)
+}
+
 func sortLists(srv *router.Srv) {
 
 	flights, err := srv.DB.GellAllFlights()
@@ -93,11 +132,13 @@ func sortLists(srv *router.Srv) {
 	srv.UnSorted = flights
 
 	// clean map
-	srv.MFlights = make(map[int]uint)
-	for k, v := range flights {
-		srv.MFlights[v.FlightNum] = uint(k) // dump uint
+	srv.MFlights = make(map[int]models.Flight)
+	for _, v := range flights {
+		srv.MFlights[v.FlightNum] = v // dump uint
 	}
 	srv.Mu.Unlock()
+
+	srv.Hub.Broadcasts <- &flights
 
 	go sortByFlightNum(flights, srv)
 	go sortbyDepartureCity(flights, srv)
@@ -105,13 +146,46 @@ func sortLists(srv *router.Srv) {
 }
 
 func sortByFlightNum(unSorted []models.Flight, srv *router.Srv) {
-	//	merge.ParallelMergesort()
+	var list []int
+	for _, v := range unSorted {
+		list = append(list, v.FlightNum)
+	}
+
+	merge.ParallelMergesort(list)
+
+	var sorted []models.Flight
+	for _, v := range list {
+		srv.Mu.RLock()
+		flight := srv.MFlights[v]
+		srv.Mu.RUnlock()
+		sorted = append(sorted, flight)
+	}
+
+	srv.Mu.Lock()
+	defer srv.Mu.Unlock()
+	srv.SortedByFlightNum = sorted // sorted
 }
 
 func sortbyDepartureCity(unSorted []models.Flight, srv *router.Srv) {
-	//
+
+	sort.SliceStable(unSorted, func(i, j int) bool {
+		return unSorted[i].From < unSorted[j].From
+	})
+
+	srv.Mu.Lock()
+	defer srv.Mu.Unlock()
+	sorted := unSorted
+	srv.SortedByCity = sorted // sorted
 }
 
 func sortByDepartureTime(unSorted []models.Flight, srv *router.Srv) {
-	//
+
+	sort.SliceStable(unSorted, func(i, j int) bool {
+		return unSorted[i].Departure.String() < unSorted[j].Departure.String()
+	})
+
+	srv.Mu.Lock()
+	defer srv.Mu.Unlock()
+	sorted := unSorted
+	srv.SortedByDepartureTime = sorted // sorted
 }

@@ -7,14 +7,6 @@ import (
 	"gorm.io/gorm"
 )
 
-type Filter struct {
-	// 0 - filter by departure city name 1 - flight number, 2 - city from, 3 - departure time
-	SortBy uint8 `json:"SortBy"`
-	// asc, desc
-	OrderBy   string `json:"OrderBy"`
-	Departure string `json:"Departure"`
-}
-
 type Flight struct {
 	FlightNum int       `json:"Flight" db:"flight_number" gorm:"index" required:"true"`
 	From      string    `json:"From" db:"departured_from" required:"true"`
