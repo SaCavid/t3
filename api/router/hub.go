@@ -25,6 +25,8 @@ type pool struct {
 }
 
 type Hub struct {
+	Started bool
+
 	pool chan pool
 
 	// write locker
@@ -82,7 +84,14 @@ func (h *Hub) Run() {
 
 func (h *Hub) Broadcast() {
 
+	b := false
 	for {
+		if !b {
+			// FIXME - need better check
+			h.Started = true
+			b = true
+		}
+
 		select {
 		case message := <-h.Broadcasts:
 			h.rw.RLock()

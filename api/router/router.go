@@ -31,6 +31,8 @@ type Srv struct {
 	Mu sync.RWMutex
 
 	Hub *Hub
+
+	ServerInitialized bool
 }
 
 func Route(srv *Srv) {
