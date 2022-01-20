@@ -31,7 +31,7 @@ func InitializeDB(srv *router.Srv) {
 		Db: db,
 	}
 
-	sortLists(srv)
+	sortLists(srv, false, nil)
 }
 
 func DBHub(srv *router.Srv) {
@@ -62,7 +62,7 @@ func processNewValues(validFlights []models.Flight, srv *router.Srv) {
 	}
 	srv.Mu.RUnlock()
 
-	wg := sync.WaitGroup{}
+	wg := &sync.WaitGroup{}
 
 	if len(notRegisteredFlights) > 0 {
 		wg.Add(1)
@@ -74,12 +74,15 @@ func processNewValues(validFlights []models.Flight, srv *router.Srv) {
 		wg.Add(1)
 		go update(registeredFlights, srv, wg)
 	}
+
+	wg.Add(1)
+	go sortLists(srv, true, wg)
+
 	wg.Wait()
 
-	go sortLists(srv)
 }
 
-func insert(notRegisteredFlights []models.Flights, srv *router.Srv, wg sync.WaitGroup) {
+func insert(notRegisteredFlights []models.Flights, srv *router.Srv, wg *sync.WaitGroup) {
 
 	defer wg.Done()
 	_, err := srv.DB.Insert(notRegisteredFlights)
@@ -88,7 +91,7 @@ func insert(notRegisteredFlights []models.Flights, srv *router.Srv, wg sync.Wait
 	}
 }
 
-func update(registeredFlights []models.Flights, srv *router.Srv, wg sync.WaitGroup) {
+func update(registeredFlights []models.Flights, srv *router.Srv, wg *sync.WaitGroup) {
 
 	defer wg.Done()
 	_, err := srv.DB.Update(registeredFlights)
@@ -97,7 +100,7 @@ func update(registeredFlights []models.Flights, srv *router.Srv, wg sync.WaitGro
 	}
 }
 
-func sortLists(srv *router.Srv) {
+func sortLists(srv *router.Srv, initialized bool, Wg *sync.WaitGroup) {
 
 	flights, err := srv.DB.GellAllFlights()
 	if err != nil {
@@ -115,13 +118,19 @@ func sortLists(srv *router.Srv) {
 	}
 	srv.Mu.Unlock()
 
-	go sortByFlightNum(flights, srv)
-	go sortbyDepartureCity(flights, srv)
-	go sortByDepartureTime(flights, srv)
+	wg := &sync.WaitGroup{}
+	wg.Add(3)
+	go sortByFlightNum(flights, srv, wg)
+	go sortbyDepartureCity(flights, srv, wg)
+	go sortByDepartureTime(flights, srv, wg, initialized)
 
+	wg.Wait()
+	if Wg != nil {
+		Wg.Done()
+	}
 }
 
-func sortByFlightNum(unSorted []models.Flight, srv *router.Srv) {
+func sortByFlightNum(unSorted []models.Flight, srv *router.Srv, wg *sync.WaitGroup) {
 	var list []int
 	for _, v := range unSorted {
 		list = append(list, v.FlightNum)
@@ -140,9 +149,10 @@ func sortByFlightNum(unSorted []models.Flight, srv *router.Srv) {
 	srv.Mu.Lock()
 	defer srv.Mu.Unlock()
 	srv.SortedByFlightNum = sorted // sorted
+	wg.Done()
 }
 
-func sortbyDepartureCity(unSorted []models.Flight, srv *router.Srv) {
+func sortbyDepartureCity(unSorted []models.Flight, srv *router.Srv, wg *sync.WaitGroup) {
 
 	newUnSorted := make([]models.Flight, len(unSorted))
 	copy(newUnSorted, unSorted)
@@ -154,9 +164,10 @@ func sortbyDepartureCity(unSorted []models.Flight, srv *router.Srv) {
 	defer srv.Mu.Unlock()
 	sorted := newUnSorted
 	srv.SortedByCity = sorted // sorted
+	wg.Done()
 }
 
-func sortByDepartureTime(unSorted []models.Flight, srv *router.Srv) {
+func sortByDepartureTime(unSorted []models.Flight, srv *router.Srv, wg *sync.WaitGroup, initialized bool) {
 
 	newUnSorted := make([]models.Flight, len(unSorted))
 	copy(newUnSorted, unSorted)
@@ -170,7 +181,11 @@ func sortByDepartureTime(unSorted []models.Flight, srv *router.Srv) {
 	srv.SortedByDepartureTime = sorted // sorted
 
 	// time filtered data sent to ws
-	if srv.Hub.Started {
+	log.Println(initialized)
+	if initialized {
 		srv.Hub.Broadcasts <- &sorted
+		log.Println("Sent invoke")
 	}
+
+	wg.Done()
 }

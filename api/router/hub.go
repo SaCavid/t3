@@ -60,7 +60,7 @@ func (h *Hub) Run() {
 	for i := broadcaster; i >= 0; i-- {
 		go h.Broadcast()
 	}
-
+	h.Started = true
 	for {
 		select {
 		case client := <-h.register:
@@ -84,19 +84,15 @@ func (h *Hub) Run() {
 
 func (h *Hub) Broadcast() {
 
-	b := false
 	for {
-		if !b {
-			// FIXME - need better check
-			h.Started = true
-			b = true
-		}
 
 		select {
 		case message := <-h.Broadcasts:
+			log.Println("New invoke")
 			h.rw.RLock()
 			clients := h.clients
 			h.rw.RUnlock()
+			log.Println(len(clients))
 			for _, v := range clients {
 				v.send <- message
 			}
@@ -106,7 +102,6 @@ func (h *Hub) Broadcast() {
 
 func (h *Hub) Pool() {
 	wg := &sync.WaitGroup{}
-	log.Println("Starting register pool", workers)
 	wg.Add(workers)
 	// create 256 workers for websocket registration
 	for i := 0; i <= workers; i++ {
@@ -118,17 +113,14 @@ func (h *Hub) Pool() {
 
 func (h *Hub) worker() {
 
-	log.Println("Starting workers")
 	for {
 		select {
 		case pool := <-h.pool:
-			log.Println("Starting websocket register")
 			conn, err := upgrader.Upgrade(pool.w, pool.r, nil)
 			if err != nil {
 				log.Println(err)
 				return
 			}
-			log.Println("Registered on websocket")
 			pool.Ch <- conn
 
 		}

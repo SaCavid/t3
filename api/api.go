@@ -21,7 +21,7 @@ func DescribeTitle() {
 }
 
 func Startup() {
-	log.SetFlags(log.Lshortfile)
+	log.SetFlags(log.Lshortfile | log.Ldate)
 
 	// load env vars
 	err := godotenv.Load("../env/.env")
