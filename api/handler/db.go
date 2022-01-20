@@ -168,24 +168,28 @@ func sortByFlightNum(unSorted []models.Flight, srv *router.Srv) {
 
 func sortbyDepartureCity(unSorted []models.Flight, srv *router.Srv) {
 
-	sort.SliceStable(unSorted, func(i, j int) bool {
-		return unSorted[i].From < unSorted[j].From
+	newUnSorted := make([]models.Flight, len(unSorted))
+	copy(newUnSorted, unSorted)
+	sort.SliceStable(newUnSorted, func(i, j int) bool {
+		return newUnSorted[i].From < newUnSorted[j].From
 	})
 
 	srv.Mu.Lock()
 	defer srv.Mu.Unlock()
-	sorted := unSorted
+	sorted := newUnSorted
 	srv.SortedByCity = sorted // sorted
 }
 
 func sortByDepartureTime(unSorted []models.Flight, srv *router.Srv) {
 
-	sort.SliceStable(unSorted, func(i, j int) bool {
-		return unSorted[i].Departure.String() < unSorted[j].Departure.String()
+	newUnSorted := make([]models.Flight, len(unSorted))
+	copy(newUnSorted, unSorted)
+	sort.SliceStable(newUnSorted, func(i, j int) bool {
+		return newUnSorted[i].Departure.Unix() < newUnSorted[j].Departure.Unix()
 	})
 
 	srv.Mu.Lock()
 	defer srv.Mu.Unlock()
-	sorted := unSorted
+	sorted := newUnSorted
 	srv.SortedByDepartureTime = sorted // sorted
 }
