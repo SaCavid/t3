@@ -23,7 +23,7 @@ type Flights struct {
 func (f *Flight) Validate() error {
 
 	// example length 2
-	if f.FlightNum < 0 {
+	if f.FlightNum <= 0 {
 		return fmt.Errorf("error with flight num length")
 	}
 
